@@ -313,6 +313,32 @@ py.bat video/voxel_video.py out/final_vox                                    :: 
 - 编码用 `imageio-ffmpeg` 自带的 ffmpeg（libx264）；OpenCV 自带的 H.264 编码器在这台机器上缺 openh264 DLL。
 - `final.ply` 的尺度 `--mpu 0.2` 是目测的（草地上的石牌和视角高度），视频里写的"10 cm 方格""身高 1.8 m"都以此为准。
 
+## 展示视频（`video/showcase.py`、`ue/run_capture.py`、`ue/run_video.py`）
+
+```bat
+py.bat video/showcase.py out/final_vox bake       :: 体素颜色：从约 290 个视角渲染 splat，反投影到第一个实心体素 -> voxel_rgb.npz
+py.bat video/showcase.py out/final_vox orbit      :: 体素化全视角：绕雕像 360°，低 -> 8 m 高 -> 低，24 s
+py.bat video/showcase.py out/final_vox wide       :: 大视角：俯瞰整块 24 m 区域，沿雕像中线一半 3DGS、一半体素，24 s
+py.bat video/showcase.py out/final_vox split      :: 屏幕分割：分割线左右扫动，左 3DGS、右体素，20 s
+py.bat video/showcase.py out/final_vox compare    :: 2×2 对比：3DGS | 体素 | 角色碰撞外壳 | 相机体积，20 s
+... --still 5 --scale 2                           :: 单帧（4K）
+```
+- 体素光线步进是一个 CuPy CUDA 内核（每帧 < 0.1 s），着色（面光照、环境光遮蔽、边线、2× 超采样）在 torch 里。
+- `orbit` 的半径按视线自动收缩：从相机到雕像之间如果有雕像以外的体素挡着，就拉近。
+
+UE 单人跑动（`showcase/ue_run.mp4`）：
+```powershell
+& $ue D:\3DGS_Research\collision_ue\CollisionWalk.uproject -ExecutePythonScript="D:/3DGS_Research/collision_proto/ue/run_capture.py D:/3DGS_Research/collision_proto/out/final_vox/ue" -unattended "-ini:Engine:[/Script/Engine.Engine]:bUseFixedFrameRate=True,[/Script/Engine.Engine]:FixedFrameRate=30.0"
+```
+然后 `py.bat ue/run_video.py out/final_vox`。
+- UE 5.8 没有 3DGS 渲染插件，所以画面是合成的：角色移动、跳跃、弹簧臂相机都是 UE 在关卡里实时算的（体素外壳 + 相机体积）；
+  每帧用 SceneCapture（只渲染角色）导出深度、底色和法线，3DGS 用 gsplat 按 UE 相机同一位姿/90° FOV 渲染，按深度遮挡合成，
+  加一个接地软阴影。角色光照在合成时按关卡太阳方向重算。
+- 路线：绕雕像 5.5 m 跑两圈（中途跳一次），再往外冲到体素外壳边界被挡住（y = 11.4 m，即外壳 11.75 m 减胶囊半径），跳一下再回来。
+- 坑：`-UseFixedTimeStep -FPS=30` 对编辑器 PIE 不生效，要用上面的 `-ini:` 打开引擎固定帧率；
+  这台机器上 SceneCapture 的 SceneColor / FinalColor 输出全黑（深度正常），所以改采 GBuffer 底色和法线自己打光；
+  cv2 读不了 UE 导出的 EXR，用 `OpenEXR` 模块。
+
 ## 已知局限
 
 - 这些数字衡量的是**融合结果和 splat 自己的深度是否一致**，不是和真实几何比。没有真值。
