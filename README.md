@@ -326,6 +326,10 @@ py.bat video/showcase.py out/final_vox compare    :: 2×2 对比：3DGS | 体素
 - 体素光线步进是一个 CuPy CUDA 内核（每帧 < 0.1 s），着色（面光照、环境光遮蔽、边线、2× 超采样）在 torch 里。
 - `orbit` 的半径按视线自动收缩：从相机到雕像之间如果有雕像以外的体素挡着，就拉近。
 
+合集：`py.bat video/montage.py out/final_vox` 把 `voxelization.mp4`（体素化过程 01–05）和上面五段剪成一段约 68 s 的
+`showcase/montage.mp4`：过程 23 s（1.5–2× 速）→ 全视角 8 s（3×）→ 大视角一半一半 8 s（2×）→ 分屏 5 s → 2×2 对比 7 s（2×）
+→ UE 实跑 11 s（撞墙段原速）→ 总结卡 4 s。加速靠跳帧，仍是 30 fps；右上角标倍速，底部是带章节刻度的进度条。
+
 UE 单人跑动（`showcase/ue_run.mp4`）：
 ```powershell
 & $ue D:\3DGS_Research\collision_ue\CollisionWalk.uproject -ExecutePythonScript="D:/3DGS_Research/collision_proto/ue/run_capture.py D:/3DGS_Research/collision_proto/out/final_vox/ue" -unattended "-ini:Engine:[/Script/Engine.Engine]:bUseFixedFrameRate=True,[/Script/Engine.Engine]:FixedFrameRate=30.0"
