@@ -326,9 +326,31 @@ py.bat video/showcase.py out/final_vox compare    :: 2×2 对比：3DGS | 体素
 - 体素光线步进是一个 CuPy CUDA 内核（每帧 < 0.1 s），着色（面光照、环境光遮蔽、边线、2× 超采样）在 torch 里。
 - `orbit` 的半径按视线自动收缩：从相机到雕像之间如果有雕像以外的体素挡着，就拉近。
 
-合集：`py.bat video/montage.py out/final_vox` 把 `voxelization.mp4`（体素化过程 01–05）和上面五段剪成一段约 68 s 的
-`showcase/montage.mp4`：过程 23 s（1.5–2× 速）→ 全视角 8 s（3×）→ 大视角一半一半 8 s（2×）→ 分屏 5 s → 2×2 对比 7 s（2×）
-→ UE 实跑 11 s（撞墙段原速）→ 总结卡 4 s。加速靠跳帧，仍是 30 fps；右上角标倍速，底部是带章节刻度的进度条。
+### 演示视频：过程 + UE 实机（`video/process_video.py`、`video/montage.py`）
+
+体素化的用途是两个：给角色碰撞，以及不让相机出镜。演示视频就按这个讲，约 46 s：
+
+| 段落 | 步骤 |
+|---|---|
+| 一 · 场景体素化（10 s） | 3DGS 原场景 → 01 体素化（扫描面经过处出现带 splat 颜色的方块）→ 02 清理浮游物 |
+| 二 · 角色碰撞区域（11 s） | 03 可走区域（胶囊体从起点按步行连通扩散）→ 04 角色碰撞外壳（从地面长出，洞被封住、边界成墙） |
+| 三 · 相机区域（13.5 s，剖面） | 05 角色能到的空气 → 06 离可见物体 0.3 m 挖掉（红）→ 07 限高 5 m（红色顶部下沉）→ 08 相机体积 |
+| 四 · UE 实机（11.6 s） | `ue_run.mp4`：前 11 s 2× 速，撞墙前后原速 |
+
+```bat
+py.bat voxel_collision.py D:/3DGS_Data/final.ply --out out/final_vox_stages --mpu 0.2 --center 0 -4 --size 24 24 --voxel 0.1 --mode outdoor --regions seed --save-stages 1
+py.bat video/showcase.py out/final_vox_stages bake
+py.bat video/process_video.py out/final_vox_stages          :: -> out/final_vox_stages/showcase/process.mp4（34.5 s）
+py.bat video/montage.py out/final_vox_stages/showcase/process.mp4 out/final_vox/showcase/ue_run.mp4 out/final_vox/showcase/montage.mp4
+```
+- `--save-stages 1` 现在还存相机体积的中间步骤 `cam_clear`（离物体 0.3 m 后）、`cam_foot`（限在可走范围上方后）、`cam_cap`（限高后）。
+  场景范围和"视线到不了的碎块"两步在 final.ply 上只去掉 30 m³ 和 1 m³，视频里并进第 08 步的字幕。
+- 相机段是剖面：相机和雕像之间的半个世界（splat 和体素一起）被一个竖直平面切掉，平面随相机转，能看到体积的高度和物体周围留出的空隙。
+- 过程视频用单独重跑的 `out/final_vox_stages`：地面高度估计有微小抖动，重跑后网格整体偏了约 6 mm，体积和可走面积不变；
+  UE 那段用的仍是 `out/final_vox`（已导入 UE 的版本）。
+- 光线步进在 `video/vox_render.py`（CuPy CUDA 内核做 3D DDA，torch 做着色）。
+
+前一版合集（体素化过程 + 全视角 + 大视角 + 分屏 + 对比）的素材仍可用 `showcase.py` 生成，但已不进演示视频。
 
 UE 单人跑动（`showcase/ue_run.mp4`）：
 ```powershell

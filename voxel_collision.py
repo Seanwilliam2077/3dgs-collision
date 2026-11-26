@@ -100,7 +100,8 @@ ap.add_argument("--visibility", choices=["none", "aerial"], default="none",
 ap.add_argument("--vis-min", type=float, default=0.5, help="minimum summed contribution (pixels) to count as seen")
 ap.add_argument("--max-voxels", type=float, default=2.0e8)
 ap.add_argument("--save-stages", type=int, default=0,
-                help="1 = also write stages.npz (raw / cleaned / filled / standable / reach / free / shell), e.g. for videos")
+                help="1 = also write stages.npz (raw / cleaned / filled / standable / reach / free / shell / camera and its "
+                     "steps cam_clear, cam_foot, cam_cap), e.g. for videos")
 ap.add_argument("--free", choices=["walk", "air"], default=None,
                 help="free space = capsule swept over walkable feet (walk), or a capsule flood through the air above a "
                      "ground slab under the walkable floor (air: joins areas a character can only drop between, and "
@@ -645,17 +646,22 @@ if a.camera:
     cam = free & ~dilate_ball(vis, a.cam_clear / a.voxel)
     del vis
     n_clear = int(cam.sum())
+    cam_st = dict(cam_clear=cam.clone()) if a.save_stages else {}        # for videos: each step of the volume
     foot_c = ndimage.binary_fill_holes(ndimage.binary_closing(foot2, structure=np.ones((3, 3)), iterations=3))
     if a.cam_margin > 0:
         foot_c = ndimage.distance_transform_edt(foot_c) * a.voxel > a.cam_margin
     cam &= torch.from_numpy(foot_c).to(dev)[:, :, None]
     n_foot = int(cam.sum())
+    if a.save_stages:
+        cam_st["cam_foot"] = cam.clone()
     if a.cam_max > 0:
         khi = torch.where(reach, kk, torch.full_like(kk, -1)).amax(2).float().cpu().numpy()   # highest walkable foot
         khi = extrapolate(khi, foot2, (2.0, 8.0, 32.0))
         kcap = np.where(np.isnan(khi), -1, np.floor(khi + a.cam_max / a.voxel)).astype(np.int64)
         cam &= kk[None, None, :] <= torch.from_numpy(kcap).to(dev)[:, :, None]
     n_cap = int(cam.sum())
+    if a.save_stages:
+        cam_st["cam_cap"] = cam.clone()
     # character eyes: feet in the free space with room for the body, --cam-eye up
     okf = reach & free
     okf[:, :, :nz - Hc + 1] &= free[:, :, Hc - 1:]
@@ -789,7 +795,8 @@ if a.save_stages:                                                            # e
                         solid_raw=pk(solid_raw if solid_raw is not None else solid), solid_clean=pk(solid_clean),
                         filled=pk(filled_vox if a.floor_fill > 0 and 'filled_vox' in globals() else np.zeros((nx, ny, nz), bool)),
                         obstacle=pk(obst), standable=pk(st), reach=pk(reach), free=pk(free), shell=pk(shell),
-                        camera=pk(cam if cam is not None else np.zeros((nx, ny, nz), bool)), seed=np.array(seed))
+                        camera=pk(cam if cam is not None else np.zeros((nx, ny, nz), bool)), seed=np.array(seed),
+                        **{k: pk(x) for k, x in (cam_st if a.camera else {}).items()})
     log(f"stages saved to {a.out}/stages.npz")
 extra = dict(camera=np.packbits(cam.cpu().numpy())) if cam is not None else {}
 np.savez_compressed(f"{a.out}/voxels.npz", dims=np.array([nx, ny, nz]), solid=np.packbits(solid.cpu().numpy()),
